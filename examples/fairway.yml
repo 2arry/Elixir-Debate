@@ -1,0 +1,51 @@
+# An example Fairway configuration. Every key is described in Fairway.Config.
+# The test suite loads this file, so it stays valid.
+
+store:
+  adapter: postgres            # memory (default) | sqlite | postgres
+  url: postgres://fairway:secret@db.internal:5432/fairway
+  pool_size: 10
+
+cluster:
+  strategy: epmd               # none (default) | epmd | gossip
+  hosts:
+    - fairway@10.0.0.1
+    - fairway@10.0.0.2
+    - fairway@10.0.0.3
+
+queues:
+  # Round-robin over tenants: nobody waits behind another tenant's backlog.
+  emails:
+    mode: per_tenant
+    concurrency: 8
+
+  # At most 2 running and 10 starts a second per tenant, with a burst of 5.
+  webhooks:
+    mode: throttle
+    concurrency: 16
+    throttle:
+      max_concurrency: 2
+      rate: 10
+      burst: 5
+
+  # Each tenant may use 2 of the 8 slots, so a runaway tenant can take down at
+  # most the nodes behind its own two.
+  imports:
+    mode: shuffle_shard
+    concurrency: 8
+    shuffle_shard:
+      shard_size: 2
+      seed: 0
+
+  # Long jobs give up their slot every half second if they are iterable.
+  exports:
+    mode: interruptible
+    concurrency: 4
+    interruptible:
+      slice_ms: 500
+    retry:
+      max_attempts: 3
+      base_backoff_ms: 500
+      max_backoff_ms: 30000
+    poll_interval_ms: 500
+    orphan_grace_ms: 15000
