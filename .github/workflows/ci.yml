@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Checks (Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        include:
+          - elixir: "1.20.4"
+            otp: "29.1.1"
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fairway_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # With this set, the tests tagged :postgres run. See test/test_helper.exs.
+      FAIRWAY_PG_URL: postgres://postgres:postgres@localhost:5432/fairway_test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Cache deps, builds and Dialyzer PLTs
+        uses: actions/cache@v6
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      # The five checks of acceptance criterion A, as written there.
+      - name: mix compile --warnings-as-errors
+        run: mix compile --warnings-as-errors
+
+      - name: mix format --check-formatted
+        run: mix format --check-formatted
+
+      - name: mix credo --strict
+        run: mix credo --strict
+
+      - name: mix dialyzer
+        run: mix dialyzer --format github
+
+      # Includes the three-node cluster tests and, because FAIRWAY_PG_URL is
+      # set, every test tagged :postgres. Warnings in test code fail the build.
+      - name: mix test
+        run: mix test --warnings-as-errors
