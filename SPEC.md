@@ -237,4 +237,56 @@ Copied from the brief, with where each is checked.
 
 ## Amendments
 
-None yet.
+Changes made during implementation, in the order they happened. Sections 1 to
+3 above are as first committed.
+
+1. **Shuffle sharding scores slots with SHA-256, not `:erlang.phash2`** (2.5).
+   Before pinning shard assignments in a test, the real assignments were
+   printed. With `phash2` over a `{seed, tenant, slot}` tuple, one slot of
+   eight was in six of nine tenants' shards: the hash ranks the slots almost
+   the same way for every tenant, which is the opposite of shuffling. SHA-256
+   over a binary of the same three values puts 2,800 tenants within 15% of
+   even over the eight slots and uses all 28 possible shards; a test asserts
+   both. The application now depends on `:crypto`.
+
+2. **A runner that is listed but does not answer** (2.7). The spec covered a
+   job on a node the leader had never seen. Two more cases turned out to
+   matter:
+   - The runner answers and does not have the job: re-queued at once. This is
+     what a leader that died between claiming and sending leaves behind.
+   - The runner is in the group but does not answer: its jobs get the same
+     `orphan_grace_ms` as a node that is not there, and it is given no new work
+     until it answers. Found by running the suite pinned to two CPUs: the
+     leader noticed a killed node's runner was silent before `:pg` reported it
+     gone, re-queued the job and dispatched it straight back to the dead
+     runner, which cost the job an attempt. One run in eight failed on it. The
+     assertion was right and was not changed; the scheduler was.
+
+3. **The "slot free" message carries the attempt.** A superseded execution
+   reporting late must not free the slot of the execution that replaced it.
+
+4. **Configuration values are matched against atoms, not converted to them.**
+   The first cluster test failed at boot on every node: `mode: fifo` was being
+   read with `String.to_existing_atom/1`, which only works once a module that
+   mentions the atom has been loaded. On the test node one always had been.
+   Not a design change, but it is the kind of bug only a freshly started node
+   shows, and the reason criterion C is worth having.
+
+5. **PostgreSQL was tested locally as well as in CI** (2.8). There was no
+   database on the development machine, so a throwaway PostgreSQL 17.11 was
+   run from unprivileged portable binaries, bound to 127.0.0.1, for the
+   `:postgres` tests. It is not part of the repository.
+
+6. **A cluster test's setup raced the scheduler.** The scheduler-kill test
+   asserted that the killed node had jobs in flight. With a backlog of short
+   jobs that was usually true and not guaranteed: one restricted run in twelve
+   killed the node between jobs. Making every slot hold a long job exposed a
+   second race, between the test's separate enqueue calls and a dispatch round
+   already under way. The test now enqueues six long jobs in one batch, waits
+   until they hold all six slots, two per node, and only then adds the
+   backlog. The assertion became stricter: exactly two jobs interrupted, both
+   re-run by a survivor. After this and amendment 2, twelve consecutive
+   restricted runs of the full suite passed.
+
+7. **Not done from section 2:** nothing. **Added beyond it:** `examples/fairway.yml`,
+   which the test suite loads.
