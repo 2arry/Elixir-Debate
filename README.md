@@ -321,6 +321,13 @@ On the development machine (WSL2, Ubuntu 24.04, 8 cores):
   code then passed 12 restricted runs in a row. That is evidence, not proof,
   that the suite is not flaky.
 
+In CI (GitHub Actions, `ubuntu-24.04`, a PostgreSQL 17 service):
+
+- All five steps pass on `main`. The first run after the code was pushed was
+  green without changes.
+- The test step posts its result line as a notice on the run, so the number of
+  tests that ran there, Postgres ones included, is visible on the run's page.
+
 Not verified, and so not claimed:
 
 - **Partitions.** The behaviour in the table above is reasoned from how

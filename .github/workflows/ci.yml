@@ -78,5 +78,11 @@ jobs:
 
       # Includes the three-node cluster tests and, because FAIRWAY_PG_URL is
       # set, every test tagged :postgres. Warnings in test code fail the build.
+      #
+      # The result line is posted as a notice on the run, so that how many
+      # tests ran here, and that none was excluded, can be seen without
+      # opening the log.
       - name: mix test
-        run: mix test --warnings-as-errors
+        run: |
+          mix test --warnings-as-errors | tee test.log
+          echo "::notice title=mix test::$(grep -E '^Result:' test.log)"
